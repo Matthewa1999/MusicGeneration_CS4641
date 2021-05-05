@@ -11,10 +11,14 @@ from keras.layers import LSTM
 from keras.layers import BatchNormalization as BatchNorm
 from keras.layers import Activation
 
-def generate():
+def generate(num):
     """ Generate a piano midi file """
+
+    notesFile = 'high_sad_notes'
+    weightFileName = 'high_sad_best.hdf5'
+
     #load the notes used to train the model
-    with open('data/notes', 'rb') as filepath:
+    with open('data/' + notesFile, 'rb') as filepath:
         notes = pickle.load(filepath)
 
     # Get all pitch names
@@ -23,9 +27,9 @@ def generate():
     n_vocab = len(set(notes))
 
     network_input, normalized_input = prepare_sequences(notes, pitchnames, n_vocab)
-    model = create_network(normalized_input, n_vocab)
+    model = create_network(normalized_input, n_vocab, weightFileName)
     prediction_output = generate_notes(model, network_input, pitchnames, n_vocab)
-    create_midi(prediction_output)
+    create_midi(prediction_output, num)
 
 def prepare_sequences(notes, pitchnames, n_vocab):
     """ Prepare the sequences used by the Neural Network """
@@ -50,7 +54,7 @@ def prepare_sequences(notes, pitchnames, n_vocab):
 
     return (network_input, normalized_input)
 
-def create_network(network_input, n_vocab):
+def create_network(network_input, n_vocab, weightFileName):
     """ create the structure of the neural network """
     model = Sequential()
     model.add(LSTM(
@@ -72,7 +76,9 @@ def create_network(network_input, n_vocab):
     model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
     # Load the weights to each node
-    model.load_weights('weights.hdf5')
+    weightPath = 'weights/' + weightFileName
+
+    model.load_weights(weightPath)
 
     return model
 
@@ -102,7 +108,7 @@ def generate_notes(model, network_input, pitchnames, n_vocab):
 
     return prediction_output
 
-def create_midi(prediction_output):
+def create_midi(prediction_output, num):
     """ convert the output from the prediction to notes and create a midi file
         from the notes """
     offset = 0
@@ -133,11 +139,13 @@ def create_midi(prediction_output):
 
     midi_stream = stream.Stream(output_notes)
 
-    now = datetime.now()
-    fileName = now.strftime("%m-%d-%Y.%H.%M.%S") + '.mid'
-    outputPath = 'outputs/' + fileName
+    emotion = 'high_sad'
+
+    fileName = emotion + str(num) + '.mid'
+    outputPath = 'outputs/' + emotion + '/' + fileName
 
     midi_stream.write('midi', fp=outputPath)
 
 if __name__ == '__main__':
-    generate()
+    for i in numpy.arange(10, 20):
+        generate(i)

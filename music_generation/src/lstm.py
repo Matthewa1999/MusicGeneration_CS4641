@@ -3,6 +3,7 @@
 import glob
 import pickle
 import numpy
+from datetime import datetime
 from music21 import converter, instrument, note, chord
 from keras.models import Sequential
 from keras.layers import Dense
@@ -12,6 +13,7 @@ from keras.layers import Activation
 from keras.layers import BatchNormalization as BatchNorm
 from keras.utils import np_utils
 from keras.callbacks import ModelCheckpoint
+from keras.callbacks import TensorBoard
 
 def train_network():
     """ Train a Neural Network to generate music """
@@ -30,7 +32,7 @@ def get_notes():
     """ Get all the notes and chords from the midi files in the ./midi_songs directory """
     notes = []
 
-    for file in glob.glob("midi_songs/*.mid"):
+    for file in glob.glob("training/low_happy/*.mid"):
         midi = converter.parse(file)
 
         print("Parsing %s" % file)
@@ -39,7 +41,9 @@ def get_notes():
 
         try: # file has instrument parts
             s2 = instrument.partitionByInstrument(midi)
-            notes_to_parse = s2.parts[0].recurse() 
+            notes_to_parse = s2.parts[0].recurse()
+            if len(notes_to_parse.elements) < 10:
+                notes_to_parse = s2.parts[1].recurse()
         except: # file has notes in a flat structure
             notes_to_parse = midi.flat.notes
 
@@ -49,7 +53,7 @@ def get_notes():
             elif isinstance(element, chord.Chord):
                 notes.append('.'.join(str(n) for n in element.normalOrder))
 
-    with open('data/notes', 'wb') as filepath:
+    with open('data/low_happy_notes', 'wb') as filepath:
         pickle.dump(notes, filepath)
 
     return notes
@@ -87,6 +91,7 @@ def prepare_sequences(notes, n_vocab):
 
 def create_network(network_input, n_vocab):
     """ create the structure of the neural network """
+
     model = Sequential()
     model.add(LSTM(
         512,
@@ -110,17 +115,24 @@ def create_network(network_input, n_vocab):
 
 def train(model, network_input, network_output):
     """ train the neural network """
-    filepath = "weights-improvement-{epoch:02d}-{loss:.4f}-bigger.hdf5"
+    now = datetime.now()
+    fileName = "low_happy"
+
+    filepath = "weights/" + fileName + "-{epoch:02d}-{loss:.4f}.hdf5"
     checkpoint = ModelCheckpoint(
         filepath,
         monitor='loss',
         verbose=0,
         save_best_only=True,
-        mode='min'
+        mode='min',
     )
+
+    logdir = "logs/scalars/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = TensorBoard(log_dir=logdir)
+
     callbacks_list = [checkpoint]
 
-    model.fit(network_input, network_output, epochs=200, batch_size=128, callbacks=callbacks_list)
+    model.fit(network_input, network_output, epochs=200, batch_size=128, callbacks=[tensorboard_callback, checkpoint])
 
 if __name__ == '__main__':
     train_network()
